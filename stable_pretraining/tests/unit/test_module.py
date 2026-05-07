@@ -1,3 +1,6 @@
+import pickle
+from functools import partial
+
 import pytest
 from stable_pretraining import Module, forward
 from stable_pretraining.losses import NTXEntLoss
@@ -5,6 +8,25 @@ from stable_pretraining.data import DataModule
 import torch.nn as nn
 import torch
 from lightning.pytorch import Trainer
+
+
+def _partial_forward(self, batch, stage, cfg):
+    return {"loss": batch["image"].mean() * cfg["scale"]}
+
+
+@pytest.mark.unit
+def test_module_accepts_partial_forward():
+    """Regression for #417: forward=partial(...) must round-trip through
+    pickle without AttributeError, since spawn-mode DataLoader workers
+    pickle the bound method via ``__func__.__name__``.
+    """
+    module = Module(
+        backbone=nn.Linear(1, 1),
+        forward=partial(_partial_forward, cfg={"scale": 2.0}),
+        optim={"opt": {"modules": "backbone", "optimizer": {"type": "AdamW"}}},
+    )
+    # Triggers the same code path multiprocessing's reducer does.
+    pickle.dumps(module.forward)
 
 
 @pytest.mark.unit

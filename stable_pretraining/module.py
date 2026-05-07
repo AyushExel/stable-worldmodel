@@ -17,6 +17,29 @@ from stable_pretraining.callbacks.registry import log as _spt_log
 from stable_pretraining.callbacks.utils import log_header
 
 
+class _NamedForward:
+    """Wrap a callable so it has ``__name__ = 'forward'``.
+
+    ``Module`` binds ``forward`` as ``types.MethodType(fn, self)``. When a
+    spawn-mode DataLoader worker pickles the bound method, multiprocessing's
+    reducer reads ``__func__.__name__`` to round-trip via ``getattr``.
+    Callables without ``__name__`` (most notably ``functools.partial``)
+    crash that reducer; wrapping here makes it transparent for the user.
+    """
+
+    __name__ = "forward"
+
+    def __init__(self, fn):
+        self._fn = fn
+
+    def __call__(self, *args, **kwargs):
+        return self._fn(*args, **kwargs)
+
+
+def _ensure_named_callable(fn):
+    return fn if hasattr(fn, "__name__") else _NamedForward(fn)
+
+
 @catch_errors_class()
 class Module(pl.LightningModule):
     """PyTorch Lightning module using manual optimization with multi-optimizer support.
@@ -136,7 +159,9 @@ class Module(pl.LightningModule):
             logging.warning(msg)
             raise ValueError(msg)
         else:
-            setattr(self, "forward", types.MethodType(forward, self))
+            setattr(
+                self, "forward", types.MethodType(_ensure_named_callable(forward), self)
+            )
 
         for key, value in kwargs.items():
             logging.info(f"  Setting attribute: self.{key} = {type(value)}")
