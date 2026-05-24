@@ -87,6 +87,19 @@ def _encode_frame(frame: np.ndarray, jpeg_quality: int) -> bytes:
     return buf.getvalue()
 
 
+def _resolve_hf_token() -> str | None:
+    """Return HF auth token from env, ``huggingface-cli login`` cache, or None."""
+    token = os.environ.get('HF_TOKEN') or os.environ.get('HUGGING_FACE_HUB_TOKEN')
+    if token:
+        return token
+    try:
+        from huggingface_hub import get_token
+
+        return get_token()
+    except ImportError:
+        return None
+
+
 _SPAWN_FORCED = False
 
 
@@ -272,7 +285,7 @@ class LanceDataset(Dataset):
         self, table
     ) -> tuple[np.ndarray, np.ndarray]:
         ep_col, _ = self._index_columns
-        reader = table.to_lance().scanner(columns=[ep_col]).to_reader()
+        reader = table.search().select([ep_col]).to_batches()
         chunks = [
             batch.column(batch.schema.get_field_index(ep_col)).to_numpy()
             for batch in reader
@@ -296,7 +309,7 @@ class LanceDataset(Dataset):
 
     def _load_full_column(self, table, key: str) -> np.ndarray:
         data: list[np.ndarray] = []
-        reader = table.to_lance().scanner(columns=[key]).to_reader()
+        reader = table.search().select([key]).to_batches()
         for batch in reader:
             values = self._batch_column_pylist(batch, key)
             if not values:
@@ -722,7 +735,7 @@ class LanceWriter:
                     f'{f.type}.'
                 )
 
-        existing = self._table.to_lance().to_table(columns=['episode_idx'])
+        existing = self._table.search().select(['episode_idx']).to_arrow()
         ep_col = existing.column('episode_idx').to_numpy()
         self._image_cols = image_cols
         self._dims = dims
@@ -887,8 +900,10 @@ class Lance(Format):
                 'virtual_hosted_style_request': 'true',
             }
             # `token` collides with AWS session token on s3:// — only inject for hf://.
-            if str(path).startswith('hf://') and os.environ.get('HF_TOKEN'):
-                opts['token'] = os.environ['HF_TOKEN']
+            if str(path).startswith('hf://'):
+                token = _resolve_hf_token()
+                if token:
+                    opts['token'] = token
             kwargs['connect_kwargs'] = {'storage_options': opts}
         return LanceDataset(path=path, **kwargs)
 
