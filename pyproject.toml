@@ -21,8 +21,11 @@ dependencies = [
   "tabulate",
   "gymnasium",
   "einops",
-  "lancedb>=0.30.0",
-  "pylance>=4.0.0",
+  # Beta wheels live on Gemfury (see [[tool.uv.index]] entries below); these
+  # are the first releases that ship the `hf://buckets/...` object_store
+  # provider, so swm can stream training datasets directly from HF Buckets.
+  "lancedb>=0.33.0b1",
+  "pylance>=7.1.0b2",
   "pyarrow",
   "pillow",
   "tqdm",
@@ -90,6 +93,24 @@ source-exclude = [
     "**/__pycache__/**",
     "**/*.pyc",
 ]
+
+# Resolve the lance + lancedb beta wheels (which carry the hf://buckets/
+# object_store provider) from their respective Gemfury indices. PyPI's
+# latest stable releases (lancedb 0.30, pylance 6.0) predate HF Buckets
+# support, so users would otherwise have to add --extra-index-url manually.
+[[tool.uv.index]]
+name = "lance-format"
+url = "https://pypi.fury.io/lance-format/"
+explicit = true
+
+[[tool.uv.index]]
+name = "lancedb"
+url = "https://pypi.fury.io/lancedb/"
+explicit = true
+
+[tool.uv.sources]
+pylance = { index = "lance-format" }
+lancedb = { index = "lancedb" }
 
 [tool.ruff]
 line-length = 79

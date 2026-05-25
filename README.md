@@ -25,10 +25,20 @@
 
 ## Installation
 
-From PyPI:
+From PyPI (uses `uv` to resolve the lance/lancedb beta wheels from Gemfury,
+which carry the `hf://buckets/...` object_store provider):
 
 ```bash
-pip install stable-worldmodel
+uv pip install stable-worldmodel
+```
+
+If you prefer plain `pip`, also pass the two beta indexes:
+
+```bash
+pip install --pre \
+    --extra-index-url https://pypi.fury.io/lance-format/ \
+    --extra-index-url https://pypi.fury.io/lancedb/ \
+    stable-worldmodel
 ```
 
 From source (development):
